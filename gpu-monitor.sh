@@ -33,5 +33,5 @@ then
 		gpu_i=${hima_gpu[$i]}
 		hima_gpu[$i]=${mapping[$gpu_i]}
 	done
-	nohup ./miner $your_config &
+	nohup ./miner -U --cuda-devices "${hima_gpu[@]}" $your_pool_config &
 fi
