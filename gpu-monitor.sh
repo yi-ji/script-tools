@@ -1,25 +1,8 @@
-# execute this script every short interval using crontab
-# ethminer is renamed as 'em'
+# crontab this script
 
-miner_config="put yours"
-
-function run_em()
-{
-	nohup ./em -S $miner_config > em.log &
-    echo `date`: start
-}
-
-function run_em_half()
-{
-	nohup ./em --cuda-devices $1 $miner_config > em.log &
-	echo `date`: start on gpu $1 only
-}
-
-function kill_em()
-{
-        kill -9 `pgrep -x em`
-        echo `date`: quit
-}
+all_gpu=(0 1 2 3)
+hima_gpu=()
+mapping=(1 2 0 3) # smi->cuda, 0123->1203
 
 function check_gpu()
 {
@@ -28,48 +11,27 @@ function check_gpu()
 
 	if [ $all_proc -eq 0 ]
 	then
-		eval gpu_$1=hima
-	elif [ $em_proc -ge 1 ]
+		hima_gpu+=($1)
+	elif [[ $em_proc -ge 1 && $all_proc -gt $em_proc ]]
 	then
-		eval gpu_$1=mining
-		if [ $all_proc -gt $em_proc ]
-		then
-			eval gpu_$1=busy
-		fi
+		pid=`nvidia-smi -i $1 | grep -e "\.\/em.*MiB" | awk '{print $3;}'`
+		kill -9 $pid
+		echo `date`: stop on gpu $1
 	fi
 }
 
-function start_gpu()
-{
-	if [[ $gpu_0 == hima ]]
-        then
-                run_em_half 0
-        fi
-        if [[ $gpu_1 == hima ]]
-        then
-                run_em_half 1
-        fi
-}
+for gpu_i in "${all_gpu[@]}"
+do
+	check_gpu $gpu_i
+done
 
-gpu_0=other
-gpu_1=other
-
-check_gpu 0
-check_gpu 1
-
-if [[ $gpu_0 == hima && $gpu_1 == hima ]]
+if [ ${#hima_gpu[@]} -gt 0 ]
 then
-	run_em
-elif [[ $gpu_0 == busy || $gpu_1 == busy ]]
-then
-	kill_em
-	check_gpu 0
-	check_gpu 1
-	start_gpu
-elif [[ ($gpu_0 == hima && $gpu_1 == mining) || ($gpu_0 == mining && $gpu_1 == hima) ]]
-then
-	kill_em
-	run_em
-else
-	start_gpu
+	echo `date`: start on gpu "${hima_gpu[@]}"
+	for i in $(seq 0 $((${#hima_gpu[@]}-1)))
+	do
+		gpu_i=${hima_gpu[$i]}
+		hima_gpu[$i]=${mapping[$gpu_i]}
+	done
+	nohup ./miner $your_config &
 fi
